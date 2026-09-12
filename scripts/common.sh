@@ -10,6 +10,16 @@ if [[ -z "${PWNDBG_VENV_PATH}" ]]; then
     PWNDBG_VENV_PATH="${PWNDBG_ABS_PATH}/.venv"
 fi
 
+# Auto-detect nix environment: if the nix build result symlink exists,
+# or if NIX_PATH is set, we are likely running in a nix context where
+# dependencies are managed by nix and uv should not be used.
+# This mirrors the PWNDBG_NO_UV=1 setting from nix/devshell.nix.
+if [[ "$PWNDBG_NO_UV" != "1" ]]; then
+    if [[ -d "${PWNDBG_ABS_PATH}/result" ]] || [[ -n "${NIX_PATH:-}" ]]; then
+        PWNDBG_NO_UV=1
+    fi
+fi
+
 if [[ "$PWNDBG_NO_UV" == "1" ]]; then
     # We are using the dependencies as installed on the system
     # so we shouldn't use uv (and can't, since it's not installed).

@@ -94,6 +94,10 @@ class GDBTestHost(TestHost):
         # NOTE: We run tests under GDB sessions and because of some cleanup/tests dependencies problems
         # we decided to run each test in a separate GDB session
 
+        # Ensure the terminfo database is available for curses (Python 3.13+ uses
+        # curses in its REPL, and test collection imports may trigger curses
+        # initialization).  Set TERM to a well-known terminal type.
+        os.environ.setdefault("TERM", "xterm-256color")
         env = os.environ.copy()
         env["TEST_BINARIES_ROOT"] = str(self._binaries_root)
         env["TESTS_PATH"] = str(self._pytest_root)
