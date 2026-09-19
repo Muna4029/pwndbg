@@ -51,8 +51,10 @@ from __future__ import annotations
 
 from typing import Dict
 from typing import List
+from typing import Optional
 
 import gdb
+import itertools
 from sortedcontainers import SortedDict
 
 import pwndbg.aglib.heap
@@ -71,7 +73,7 @@ CALLOC_NAME = "calloc"
 REALLOC_NAME = "realloc"
 FREE_NAME = "free"
 
-last_issue: str | None = None
+last_issue: Optional[str] = None
 
 # Useful to track possbile collision errors.
 PRINT_DEBUG = False
@@ -109,7 +111,7 @@ def is_enabled() -> bool:
     return any(installed)
 
 
-def resolve_address(name: str) -> int | None:
+def resolve_address(name: str) -> Optional[int]:
     """
     Checks whether a given symbol is available and part of libc, and returns its
     address.
@@ -136,7 +138,7 @@ def resolve_address(name: str) -> int | None:
     if not info or LIBC_NAME not in info:
         print(
             message.warn(
-                f'Found "{name}" that does not seem to belong to {LIBC_NAME}. Refusing to use.'
+                f'Found symbol "{name}" that does not appear to belong to libc. Refusing to use.'
             )
         )
         return None
@@ -250,7 +252,7 @@ class Tracker:
         """
         Returns colored string of the provided pointer/address
         """
-        if colored_ptr := self.colorized_heap_ptrs.get(ptr)
+        if colored_ptr := self.colorized_heap_ptrs.get(ptr):
             return colored_ptr
 
         idx = len(self.colorized_heap_ptrs) % len(PTRS_COLORS)
@@ -670,7 +672,7 @@ def install(disable_hardware_watchpoints=True) -> None:
         print(message.error("The following required symbols are not available:"))
         for name in (x[0] for x in zip(required_symbols, available) if not x[1]):
             print(message.error(f"    - {name}"))
-        print(message.error(f"Make sure {LIBC_NAME} has already been loaded."))
+        print(message.error("Make sure libc has been loaded."))
 
         return
 
