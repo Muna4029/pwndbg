@@ -12,6 +12,13 @@ from typing import Dict
 from typing import List
 
 
+def _check_terminfo_error(stderr: str) -> bool:
+    """
+    Check if the error is related to missing terminfo database.
+    """
+    return "terminfo" in stderr.lower() or "_curses.error" in stderr.lower()
+
+
 def _collection_from_pytest(
     result: CompletedProcess[str], pwndbg_root: Path, pytest_root: Path
 ) -> List[str]:
@@ -21,7 +28,15 @@ def _collection_from_pytest(
     tests_collect_output = result.stdout
 
     if result.returncode != 0:
-        raise RuntimeError(f"collection command failed: {result.stderr} {result.stdout}")
+        stderr = result.stderr if result.stderr else ""
+        # Provide a more helpful error message when collection fails due to
+        # missing terminfo database
+        if _check_terminfo_error(stderr):
+            raise RuntimeError(
+                "collection command failed: missing terminfo database. "
+                "Please install the ncurses-terminfo package or ensure TERM is set correctly."
+            )
+        raise RuntimeError(f"collection command failed: {stderr} {result.stdout}")
 
     # Extract the test names from the output using regex
     #
