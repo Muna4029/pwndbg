@@ -156,6 +156,14 @@ def get_gdb_host(args: argparse.Namespace, local_pwndbg_root: Path) -> TestHost:
         if not gdb_path.exists():
             print("ERROR: No nix-compatible pwndbg found. Run nix build .#pwndbg-dev")
             sys.exit(1)
+
+        if args.group == Group.CROSS_ARCH_USER:
+            # Check if the nix-built pwndbg supports cross architecture targets
+            supports_arches = "py import os; archs = ['i386', 'aarch64', 'arm', 'mips', 'riscv', 'sparc']; os._exit(3) if len([arch for arch in archs if arch in gdb.architecture_names()]) == len(archs) else os._exit(2)"
+            result = subprocess.run([str(gdb_path), "-nx", "-ex", supports_arches], capture_output=True)
+            if result.returncode != 3:
+                print("SKIP: pwndbg does not support cross architecture targets - skipping cross-arch-user tests")
+                sys.exit(0)
     elif args.group == Group.CROSS_ARCH_USER:
         # Some systems don't ship 'gdb-multiarch', but support multiple
         # architectures in their regular binaries. Try the regular GDB.
@@ -171,8 +179,8 @@ def get_gdb_host(args: argparse.Namespace, local_pwndbg_root: Path) -> TestHost:
         if result.returncode == 3:
             gdb_path = Path(gdb_path_str)
         else:
-            print("ERROR: 'pwndbg' does not support cross architecture targets")
-            sys.exit(1)
+            print("SKIP: pwndbg does not support cross architecture targets - skipping cross-arch-user tests")
+            sys.exit(0)
     else:
         # Use the regular system GDB.
         gdb_path_str = shutil.which("pwndbg")
