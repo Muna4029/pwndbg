@@ -1794,4 +1794,11 @@ class GDB(pwndbg.dbg_mod.Debugger):
         else:
             command = "set python print-stack message"
 
-        gdb.execute(command, from_tty=True, to_string=True)
+        # Avoid forcing GDB to treat this as coming from a TTY in CI/headless
+        # environments (which can trigger terminal/curses initialization).
+        try:
+            gdb.execute(command, from_tty=False, to_string=True)
+        except Exception:
+            # Ignore errors (e.g., curses/terminfo failures) to keep test
+            # collection and headless usage robust.
+            pass

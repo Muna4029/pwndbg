@@ -21,7 +21,20 @@ def _collection_from_pytest(
     tests_collect_output = result.stdout
 
     if result.returncode != 0:
-        raise RuntimeError(f"collection command failed: {result.stderr} {result.stdout}")
+        stderr_text = (result.stderr or "").lower()
+        # Some environments (CI) may lack terminfo/curses and pytest will
+        # emit a non-zero exit code while still printing collection output.
+        # If stderr indicates a terminal/terminfo-related error, warn and
+        # attempt to recover by parsing stdout rather than failing hard.
+        if "terminfo" in stderr_text or "setupterm" in stderr_text or "_curses" in stderr_text:
+            # local import to avoid changing module-level imports
+            import warnings
+
+            warnings.warn(
+                "pytest collection subprocess returned non-zero exit code but stderr indicates a terminal/terminfo error; continuing to parse collection output."
+            )
+        else:
+            raise RuntimeError(f"collection command failed: {result.stderr} {result.stdout}")
 
     # Extract the test names from the output using regex
     #

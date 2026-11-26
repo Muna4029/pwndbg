@@ -99,7 +99,14 @@ def run_tests_and_print_stats(
         print("         requested parallel execution. Tests will *not* run in parallel.")
         serial = True
 
-    tests_list = host.collect()
+    # Collect tests, but guard against collection-time failures (e.g. missing terminfo/curses)
+    try:
+        tests_list = host.collect()
+    except Exception as e:
+        print(f"ERROR: test collection failed: {e}")
+        print("Hint: collection failures can be caused by missing terminal/terminfo resources (e.g. curses/terminfo). Ensure your environment provides a valid TERM and terminfo database or run tests in a container with necessary deps.")
+        sys.exit(1)
+
     if regex_filter is not None:
         # Filter test names if required.
         tests_list = [case for case in tests_list if re.search(regex_filter, case)]
@@ -158,24 +165,42 @@ def get_gdb_host(args: argparse.Namespace, local_pwndbg_root: Path) -> TestHost:
             sys.exit(1)
     elif args.group == Group.CROSS_ARCH_USER:
         # Some systems don't ship 'gdb-multiarch', but support multiple
-        # architectures in their regular binaries. Try the regular GDB.
-        supports_arches = "py import os; archs = ['i386', 'aarch64', 'arm', 'mips', 'riscv', 'sparc']; os._exit(3) if len([arch for arch in archs if arch in gdb.architecture_names()]) == len(archs) else os._exit(2)"
+        # architectures in their regular binaries. Try common GDB executables.
+        supports_arches = (
+            "python import os, gdb; archs = ['i386', 'aarch64', 'arm', 'mips', 'riscv', 'sparc']; "
+            "os._exit(3) if len([arch for arch in archs if arch in gdb.architecture_names()]) == len(archs) else os._exit(2)"
+        )
 
-        gdb_path_str = shutil.which("pwndbg")
+        # Prefer gdb-multiarch, then gdb, then pwndbg if available
+        candidates = ["gdb-multiarch", "gdb", "pwndbg"]
+        gdb_path_str = None
+        chosen_name = None
+        for cand in candidates:
+            gdb_path_str = shutil.which(cand)
+            if gdb_path_str is not None:
+                chosen_name = cand
+                break
+
         if gdb_path_str is None:
-            print("ERROR: No 'pwndbg' executables in path")
+            print("ERROR: No GDB executable found in PATH (tried gdb-multiarch, gdb, pwndbg)")
             sys.exit(1)
 
+        # Ask the found GDB whether it supports the required architectures.
         result = subprocess.run([gdb_path_str, "-nx", "-ex", supports_arches], capture_output=True)
-        # GDB supports cross architecture targets
+        # Our helper exits with code 3 when all archs are supported.
         if result.returncode == 3:
             gdb_path = Path(gdb_path_str)
         else:
-            print("ERROR: 'pwndbg' does not support cross architecture targets")
+            print(f"ERROR: '{chosen_name}' does not support the required cross-architecture targets")
+            # Show some diagnostic output to help debugging
+            if result.stdout:
+                print(result.stdout)
+            if result.stderr:
+                print(result.stderr)
             sys.exit(1)
     else:
         # Use the regular system GDB.
-        gdb_path_str = shutil.which("pwndbg")
+        gdb_path_str = shutil.which("gdb")
         if gdb_path_str is None:
             print("ERROR: No 'gdb' executable in path")
             sys.exit(1)
@@ -336,17 +361,27 @@ def make_all(path: Path, jobs: int = multiprocessing.cpu_count()):
         raise ValueError(f"given non-existent path {path}")
 
     print(f"[+] make -C {path} -j{jobs} all")
-    try:
-        subprocess.check_call(
-            [
-                "make",
-                f"-j{jobs}",
-                "ZIGCC=" + os.path.join(os.path.dirname(ziglang.__file__), "zig") + " cc",
-                "all",
-            ],
-            cwd=str(path),
-        )
-    except subprocess.CalledProcessError:
+
+    cmd = [
+        "make",
+        f"-j{jobs}",
+        "ZIGCC=" + os.path.join(os.path.dirname(ziglang.__file__), "zig") + " cc",
+        "all",
+    ]
+
+    # Use subprocess.run so we can capture output and provide better diagnostics
+    result = subprocess.run(cmd, cwd=str(path), capture_output=True, text=True)
+    if result.returncode != 0:
+        combined = (result.stdout or "") + "\n" + (result.stderr or "")
+        # Detect a common missing external build dependency and provide a clearer message
+        if "uv" in combined or "uv: binary not found" in combined or "Error: 'uv' binary not found" in combined:
+            print("ERROR: Build failed due to missing 'uv' binary required by the project's build.\nPlease install 'uv' or run the project's setup steps (e.g. setup-dev.sh / nix setup) and try again.")
+        else:
+            print(f"ERROR: make failed with returncode {result.returncode}")
+            if result.stdout:
+                print(result.stdout)
+            if result.stderr:
+                print(result.stderr)
         sys.exit(1)
 
 
