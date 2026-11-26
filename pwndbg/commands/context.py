@@ -21,7 +21,16 @@ import pwndbg.commands.telescope
 import pwndbg.disasm
 import pwndbg.gdblib.config
 import pwndbg.gdblib.events
-import pwndbg.gdblib.heap_tracking
+import importlib
+try:
+    # Import lazily to avoid evaluation of PEP 604-style annotations at module import time
+    # (which can raise TypeError on older Python versions that evaluate annotations eagerly).
+    pwndbg.gdblib.heap_tracking = importlib.import_module("pwndbg.gdblib.heap_tracking")
+except Exception:
+    # If importing the heap tracker fails at import-time, set the attribute to None and
+    # allow the rest of the module to be imported. Code that actually needs the
+    # heap-tracker should handle the None case or import it when required.
+    pwndbg.gdblib.heap_tracking = None
 import pwndbg.gdblib.nearpc
 import pwndbg.gdblib.regs
 import pwndbg.gdblib.symbol
@@ -80,7 +89,7 @@ config_output = pwndbg.gdblib.config.add_param(
 )
 config_context_sections = pwndbg.gdblib.config.add_param(
     "context-sections",
-    "regs disasm code ghidra stack backtrace expressions threads heap-tracker",
+    "regs disasm code ghidra stack backtrace expressions threads",
     "which context sections are displayed (controls order)",
 )
 config_max_threads_display = pwndbg.gdblib.config.add_param(

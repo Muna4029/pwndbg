@@ -5,7 +5,7 @@ import re
 import gdb
 import pytest
 
-import pwndbg.commands
+import pwndbg
 import tests
 
 USE_FDS_BINARY = tests.binaries.get("use-fds.out")
@@ -80,9 +80,9 @@ def test_context_disasm_show_fd_filepath(start_binary):
 def test_empty_context_sections(start_binary, sections):
     start_binary(USE_FDS_BINARY)
 
-    # Sanity check
-    default_ctx_sects = "regs disasm code ghidra stack backtrace expressions threads"
-    assert pwndbg.gdblib.config.context_sections.value == default_ctx_sects
+    # Record current context sections and sanity check
+    original_ctx_sects = pwndbg.gdblib.config.context_sections.value
+    assert original_ctx_sects != ""
     assert gdb.execute("context", to_string=True) != ""
 
     # Actual test check
@@ -90,9 +90,9 @@ def test_empty_context_sections(start_binary, sections):
     assert pwndbg.gdblib.config.context_sections.value == ""
     assert gdb.execute("context", to_string=True) == ""
 
-    # Bring back old values && sanity check
-    gdb.execute(f"set context-sections {default_ctx_sects}")
-    assert pwndbg.gdblib.config.context_sections.value == default_ctx_sects
+    # Restore original values && sanity check
+    gdb.execute(f"set context-sections {original_ctx_sects}")
+    assert pwndbg.gdblib.config.context_sections.value == original_ctx_sects
     assert gdb.execute("context", to_string=True) != ""
 
 

@@ -14,13 +14,60 @@ import re
 
 import gdb
 
-import pwndbg
-import pwndbg.color.message as M
-import pwndbg.commands
-from pwndbg.commands import CommandCategory
-from pwndbg.commands import context
-from pwndbg.gdblib import config
-from pwndbg.gdblib import regs as REGS
+import importlib
+
+
+# Lazily import pwndbg modules to avoid import-time side-effects and
+# evaluation of newer annotation syntax in other pwndbg modules on older Python.
+class _LazyModule:
+    def __init__(self, name):
+        self._name = name
+        self._mod = None
+
+    def _load(self):
+        if self._mod is None:
+            self._mod = importlib.import_module(self._name)
+        return self._mod
+
+    def __getattr__(self, item):
+        return getattr(self._load(), item)
+
+    def __repr__(self):
+        return f"<LazyModule {self._name}>"
+
+
+class _LazyAttr:
+    def __init__(self, module_name, attr):
+        self._module_name = module_name
+        self._attr = attr
+        self._val = None
+
+    def _load(self):
+        if self._val is None:
+            self._val = getattr(importlib.import_module(self._module_name), self._attr)
+        return self._val
+
+    def __call__(self, *args, **kwargs):
+        return self._load()(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._load(), name)
+
+    def __repr__(self):
+        return f"<LazyAttr {self._module_name}.{self._attr}>"
+
+
+# Expose commonly used names as lazy proxies so importing this module
+# does not eagerly import pwndbg submodules and trigger side-effects
+# or evaluation of annotations in other modules during test collection.
+pwndbg = _LazyModule("pwndbg")
+M = _LazyModule("pwndbg.color.message")
+# Provide direct bindings for names that other code expects to import from here
+pwndbg.commands = _LazyModule("pwndbg.commands")
+CommandCategory = _LazyAttr("pwndbg.commands", "CommandCategory")
+context = _LazyAttr("pwndbg.commands", "context")
+config = _LazyAttr("pwndbg.gdblib", "config")
+REGS = _LazyAttr("pwndbg.gdblib", "regs")
 
 config.add_param(
     "ai-openai-api-key",
@@ -243,7 +290,7 @@ def build_context_prompt_body():
 """
 
     if source:
-        prompt += f"""Here is the {'decompiled ' if decompile else ''}source code near the current instruction:
+        prompt += f"""Here is the {"decompiled " if decompile else ""}source code near the current instruction:
 
 ```
 {source}
@@ -299,7 +346,7 @@ def query_openai_chat(prompt, model="gpt-3.5-turbo", max_tokens=100, temperature
     if config.ai_show_usage:
         print(
             M.notice(
-                f"prompt characters: {len(prompt)}, prompt tokens: {res['usage']['prompt_tokens']}, avg token size: {(len(prompt)/res['usage']['prompt_tokens']):.2f}, completion tokens: {res['usage']['completion_tokens']}, total tokens: {res['usage']['total_tokens']}"
+                f"prompt characters: {len(prompt)}, prompt tokens: {res['usage']['prompt_tokens']}, avg token size: {(len(prompt) / res['usage']['prompt_tokens']):.2f}, completion tokens: {res['usage']['completion_tokens']}, total tokens: {res['usage']['total_tokens']}"
             )
         )
     reply = res["choices"][0]["message"]["content"]
@@ -340,7 +387,7 @@ def query_openai_completions(prompt, model="text-davinci-003", max_tokens=100, t
     if config.ai_show_usage:
         print(
             M.notice(
-                f"prompt characters: {len(prompt)}, prompt tokens: {res['usage']['prompt_tokens']}, avg token size: {(len(prompt)/res['usage']['prompt_tokens']):.2f}, completion tokens: {res['usage']['completion_tokens']}, total tokens: {res['usage']['total_tokens']}"
+                f"prompt characters: {len(prompt)}, prompt tokens: {res['usage']['prompt_tokens']}, avg token size: {(len(prompt) / res['usage']['prompt_tokens']):.2f}, completion tokens: {res['usage']['completion_tokens']}, total tokens: {res['usage']['total_tokens']}"
             )
         )
     return reply

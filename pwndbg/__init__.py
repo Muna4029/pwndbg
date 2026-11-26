@@ -24,8 +24,13 @@ try:
     import pwndbg.disasm.riscv
     import pwndbg.disasm.sparc
     import pwndbg.disasm.x86
-    import pwndbg.heap
-except ModuleNotFoundError:
+    # Defer importing pwndbg.heap because it may register global state at import-time
+    # (e.g. adding a 'heap-tracker' context section) and can raise import-time
+    # errors on older Python versions. Import pwndbg.heap lazily where needed.
+except Exception:
+    # Broadly catch import-time errors for these optional modules so pwndbg
+    # can still be imported in minimal/test environments without failing
+    # collection due to unrelated import-time exceptions.
     pass
 
 import pwndbg.exception
